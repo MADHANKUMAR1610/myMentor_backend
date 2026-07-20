@@ -31,12 +31,12 @@ router = APIRouter(
 )
 async def get_dashboard(
     current_user: dict = Depends(get_current_user),
-) -> ApiResponse[dict]:
-    """Return student dashboard."""
-
+):
     dashboard = await progress_service.get_dashboard(
         current_user,
     )
+
+    print("Dashboard =", dashboard)
 
     return ApiResponse(
         message="Dashboard retrieved successfully",

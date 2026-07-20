@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+
+  api:
+    build: .
+    container_name: digipin-api
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - .env
+
+    depends_on:
+      - mongodb
+
+    restart: unless-stopped
+
+    volumes:
+      - .:/app
+
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  mongodb:
+    image: mongo:8.0
+
+    container_name: digipin-mongodb
+
+    restart: unless-stopped
+
+    ports:
+      - "27017:27017"
+
+    volumes:
+      - mongodb_data:/data/db
+
+volumes:
+  mongodb_data:

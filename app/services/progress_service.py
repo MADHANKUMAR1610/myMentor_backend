@@ -491,56 +491,62 @@ class ProgressService:
 
         if xp <= 0:
             return
-
-        await self.user_repository.increment_xp_and_streak(
-            user_id,
-            xp,
+        await self._award_xp(
+            user["id"],
+            xp_reward,
         )
 
         logger.info(
-            "XP and streak updated. User=%s XP=%s",
-            user_id,
-            xp,
+            "Level %s completed successfully by user %s. XP=%s",
+            level_id,
+            user["id"],
+            xp_reward,
         )
+
+        return {
+            "ok": True,
+            "xp_earned": xp_reward,
+        }
 
     async def get_dashboard(
         self,
         user: dict,
     ) -> dict:
-       """Return dashboard information for the logged-in user."""
+        """Return dashboard information for the logged-in user."""
 
-       logger.info(
-       "Loading dashboard for user %s",
-        user["id"],
+        logger.info(
+            "Loading dashboard for user %s",
+            user["id"],
         )
 
-       profile = await self.user_repository.get_public_by_id(
-        user["id"],
+        profile = await self.user_repository.get_public_by_id(
+            user["id"],
         )
 
-       if not profile:
-        raise NotFoundException(
-            "User not found",
-        )
+        if not profile:
+            raise NotFoundException("User not found")
 
         enrollments = await self.course_repository.get_user_enrollments(
-        user["id"],
-    )
+            user["id"],
+        )
 
         progress = await self.progress_repository.get_by_user(
-        user["id"],
-    )
+            user["id"],
+        )
 
         completed_levels = await self.progress_repository.count_completed_levels(
-        user_id=user["id"],
-    )
+            user_id=user["id"],
+        )
 
-        return {
-        "user": profile,
-        "enrollments": enrollments,
-        "progress": progress,
-        "completed_levels": completed_levels,
-        "xp": profile.get("xp", 0),
-        "streak": profile.get("streak_count", 0),
-         }
+        dashboard = {
+            "user": profile,
+            "enrollments": enrollments,
+            "progress": progress,
+            "completed_levels": completed_levels,
+            "xp": profile.get("xp", 0),
+            "streak": profile.get("streak_count", 0),
+        }
+
+        logger.info("Dashboard Response: %s", dashboard)
+        return dashboard
 progress_service = ProgressService()
