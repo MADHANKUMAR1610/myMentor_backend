@@ -221,6 +221,21 @@ class ProgressRepository:
             },
             DEFAULT_PROJECTION,
         ).to_list(MAX_RESULTS)
-
+    async def get_continue_learning(
+        self,
+        user_id: str,
+    ) -> dict | None: 
+        """Return the student's next level to continue."""
+        logger.debug(
+           "Fetching continue learning data for user=%s",
+            user_id,
+        )
+        return await self.progress_collection.find_one(
+        {
+            "user_id": user_id,
+            "completed": False,
+        },
+        DEFAULT_PROJECTION,
+    )
 
 progress_repository = ProgressRepository()

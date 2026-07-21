@@ -1,6 +1,7 @@
 """Student progress business logic."""
 
 import logging
+import profile
 
 from app.core.exceptions import (
     BadRequestException,
@@ -512,41 +513,61 @@ class ProgressService:
         self,
         user: dict,
     ) -> dict:
-        """Return dashboard information for the logged-in user."""
+     profile = await self.user_repository.get_public_by_id(user["id"])
+     if not profile:
+        raise NotFoundException("User not found")
+     enrollments = await self.course_repository.get_user_enrollments(
+        user["id"]
+    )
+     progress = await self.progress_repository.get_by_user(
+        user["id"]
+    )
 
-        logger.info(
-            "Loading dashboard for user %s",
-            user["id"],
+     completed_levels = ( await self.progress_repository.count_completed_levels(
+            user["id"]
         )
+    )
 
-        profile = await self.user_repository.get_public_by_id(
-            user["id"],
+     continue_learning = (
+        await self.progress_repository.get_continue_learning(
+            user["id"]
         )
+    )
 
-        if not profile:
-            raise NotFoundException("User not found")
-
-        enrollments = await self.course_repository.get_user_enrollments(
-            user["id"],
+     course_cards = (
+        await self.course_repository.get_dashboard_courses(
+            user["id"]
         )
+    )
 
-        progress = await self.progress_repository.get_by_user(
-            user["id"],
+     leaderboard = (
+        await self.user_repository.get_leaderboard_summary(
+            user["id"]
         )
+    )
 
-        completed_levels = await self.progress_repository.count_completed_levels(
-            user_id=user["id"],
-        )
-
-        dashboard = {
-            "user": profile,
-            "enrollments": enrollments,
-            "progress": progress,
-            "completed_levels": completed_levels,
+     return {
+        "user": {
+            "id": profile["id"],
+            "name": profile["name"],
+            "email": profile["email"],
+            "avatar_url": profile.get("avatar_url"),
             "xp": profile.get("xp", 0),
             "streak": profile.get("streak_count", 0),
-        }
+        },
 
-        logger.info("Dashboard Response: %s", dashboard)
-        return dashboard
+        "stats": {
+            "current_xp": profile.get("xp", 0),
+            "streak": profile.get("streak_count", 0),
+            "courses": len(enrollments),
+            "levels_cleared": completed_levels,
+        },
+
+        "continue_learning": continue_learning,
+
+        "courses": course_cards,
+
+        "leaderboard": leaderboard,
+    }
+  
 progress_service = ProgressService()

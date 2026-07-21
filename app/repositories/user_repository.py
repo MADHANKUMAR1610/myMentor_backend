@@ -31,17 +31,10 @@ class UserRepository:
         self,
         email: str,
     ) -> Optional[dict]:
-        """Return a user by email."""
-
-        logger.debug(
-            "Fetching user by email %s",
-            email,
-        )
+        logger.debug("Fetching user by email %s", email)
 
         return await self.collection.find_one(
-            {
-                "email": email,
-            },
+            {"email": email},
             DEFAULT_PROJECTION,
         )
 
@@ -49,17 +42,10 @@ class UserRepository:
         self,
         user_id: str,
     ) -> Optional[dict]:
-        """Return a user by ID."""
-
-        logger.debug(
-            "Fetching user %s",
-            user_id,
-        )
+        logger.debug("Fetching user %s", user_id)
 
         return await self.collection.find_one(
-            {
-                "id": user_id,
-            },
+            {"id": user_id},
             DEFAULT_PROJECTION,
         )
 
@@ -67,17 +53,13 @@ class UserRepository:
         self,
         user_id: str,
     ) -> Optional[dict]:
-        """Return a user's public profile."""
-
         logger.debug(
             "Fetching public profile for user %s",
             user_id,
         )
 
         return await self.collection.find_one(
-            {
-                "id": user_id,
-            },
+            {"id": user_id},
             PUBLIC_USER_PROJECTION,
         )
 
@@ -85,24 +67,15 @@ class UserRepository:
         self,
         user: dict,
     ) -> None:
-        """Insert a new user."""
+        logger.debug("Creating user %s", user["id"])
 
-        logger.debug(
-            "Creating user %s",
-            user["id"],
-        )
-
-        await self.collection.insert_one(
-            user,
-        )
+        await self.collection.insert_one(user)
 
     async def increment_xp(
         self,
         user_id: str,
         xp: int,
     ) -> None:
-        """Increase a user's XP."""
-
         logger.debug(
             "Incrementing XP for user %s by %s",
             user_id,
@@ -110,9 +83,7 @@ class UserRepository:
         )
 
         await self.collection.update_one(
-            {
-                "id": user_id,
-            },
+            {"id": user_id},
             {
                 "$inc": {
                     "xp": xp,
@@ -125,17 +96,13 @@ class UserRepository:
         user_id: str,
         xp: int,
     ) -> None:
-        """Increase a user's XP and streak."""
-
         logger.debug(
             "Incrementing XP and streak for user %s",
             user_id,
         )
 
         await self.collection.update_one(
-            {
-                "id": user_id,
-            },
+            {"id": user_id},
             {
                 "$inc": {
                     "xp": xp,
@@ -145,29 +112,17 @@ class UserRepository:
         )
 
     async def count_students(self) -> int:
-        """Return total student count."""
-
-        logger.debug(
-            "Counting students",
-        )
+        logger.debug("Counting students")
 
         return await self.collection.count_documents(
-            {
-                "role": "student",
-            }
+            {"role": "student"}
         )
 
     async def get_students(self) -> list[dict]:
-        """Return all students."""
-
-        logger.debug(
-            "Fetching student list",
-        )
+        logger.debug("Fetching student list")
 
         return await self.collection.find(
-            {
-                "role": "student",
-            },
+            {"role": "student"},
             PUBLIC_USER_PROJECTION,
         ).to_list(MAX_RESULTS)
 
@@ -175,8 +130,6 @@ class UserRepository:
         self,
         limit: int = 20,
     ) -> list[dict]:
-        """Return leaderboard ordered by XP."""
-
         logger.debug(
             "Fetching leaderboard (limit=%s)",
             limit,
@@ -184,15 +137,38 @@ class UserRepository:
 
         return (
             await self.collection.find(
-                {
-                    "role": "student",
-                },
+                {"role": "student"},
                 PUBLIC_USER_PROJECTION,
             )
             .sort("xp", -1)
             .limit(limit)
             .to_list(limit)
         )
+
+    async def get_leaderboard_summary(
+        self,
+        user_id: str,
+    ) -> dict:
+        """Return leaderboard summary."""
+
+        logger.debug(
+            "Fetching leaderboard summary for user %s",
+            user_id,
+        )
+
+        leaderboard = await self.get_leaderboard(100)
+
+        rank = None
+
+        for index, user in enumerate(leaderboard, start=1):
+            if user["id"] == user_id:
+                rank = index
+                break
+
+        return {
+            "rank": rank,
+            "total_students": len(leaderboard),
+        }
 
 
 user_repository = UserRepository()

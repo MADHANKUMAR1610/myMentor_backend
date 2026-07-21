@@ -159,5 +159,52 @@ class CourseRepository:
             {}
         )
 
+    async def get_dashboard_courses(
+        self,
+        user_id: str,
+    ) -> list[dict]:
+        """Return dashboard course cards for a user."""
+
+        logger.debug(
+            "Fetching dashboard courses for user=%s",
+            user_id,
+        )
+
+        enrollments = await self.get_user_enrollments(
+            user_id,
+        )
+
+        if not enrollments:
+            return []
+
+        course_ids = [
+            enrollment["course_id"]
+            for enrollment in enrollments
+        ]
+
+        courses = await self.get_by_ids(
+            course_ids,
+        )
+
+        dashboard_courses = []
+
+        for course in courses:
+            dashboard_courses.append(
+                {
+                    "course_id": course["id"],
+                    "title": course.get("title"),
+                    "thumbnail": course.get("thumbnail"),
+                    "description": course.get("description"),
+                    "progress_percentage": 0,
+                    "completed_lessons": 0,
+                    "total_lessons": course.get(
+                        "total_levels",
+                        0,
+                    ),
+                }
+            )
+
+        return dashboard_courses
+
 
 course_repository = CourseRepository()
