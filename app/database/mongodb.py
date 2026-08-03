@@ -32,7 +32,7 @@ async def connect_database() -> None:
 
     try:
         _client = AsyncIOMotorClient(
-            settings.DATABASE_URL,
+           settings.MONGO_DATABASE_URL,
             serverSelectionTimeoutMS=5000,
         )
 
@@ -41,7 +41,7 @@ async def connect_database() -> None:
         )
 
         _database = _client[
-            settings.DATABASE_NAME
+           settings.MONGO_DATABASE_URL
         ]
 
         logger.info(

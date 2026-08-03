@@ -1,34 +1,13 @@
-"""Code execution engine.
-
-Uses local subprocess-based execution for supported languages.
-
-For a production deployment, untrusted code execution should be moved
-to an isolated execution service such as Judge0.
-"""
+"""Code execution engine."""
 
 import asyncio
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
 from typing import Tuple
-
-
-# Judge0 configuration
-JUDGE0_API_KEY = os.environ.get("JUDGE0_API_KEY", "")
-JUDGE0_HOST = os.environ.get(
-    "JUDGE0_HOST",
-    "judge0-ce.p.rapidapi.com",
-)
-JUDGE0_BASE = f"https://{JUDGE0_HOST}"
-
-JUDGE0_LANG = {
-    "python": 71,
-    "javascript": 63,
-    "java": 62,
-    "cpp": 54,
-}
 
 LOCAL_TIMEOUT = 5
 
@@ -38,10 +17,9 @@ async def _run_local(
     stdin: str,
     cwd: str,
 ) -> Tuple[str, str, int]:
-    """Run a local command with an execution timeout."""
+    """Run a local command."""
 
     start = time.monotonic()
-    process = None
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -52,60 +30,81 @@ async def _run_local(
             cwd=cwd,
         )
 
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+        stdout, stderr = await asyncio.wait_for(
             process.communicate(
-                input=(
-                    stdin.encode("utf-8")
-                    if stdin
-                    else None
-                )
+                input=stdin.encode() if stdin else None
             ),
             timeout=LOCAL_TIMEOUT,
         )
 
-        elapsed_ms = int(
+        elapsed = int(
             (time.monotonic() - start) * 1000
         )
 
-        stdout = stdout_bytes.decode(
-            "utf-8",
-            errors="replace",
+        return (
+            stdout.decode(errors="replace"),
+            stderr.decode(errors="replace"),
+            elapsed,
         )
-
-        stderr = stderr_bytes.decode(
-            "utf-8",
-            errors="replace",
-        )
-
-        return stdout, stderr, elapsed_ms
 
     except asyncio.TimeoutError:
-        if process is not None:
-            try:
-                process.kill()
-                await process.wait()
-            except Exception:
-                pass
-
-        elapsed_ms = int(
-            (time.monotonic() - start) * 1000
-        )
+        process.kill()
+        await process.wait()
 
         return (
             "",
             f"Time Limit Exceeded ({LOCAL_TIMEOUT}s)",
-            elapsed_ms,
+            LOCAL_TIMEOUT * 1000,
         )
 
     except FileNotFoundError as exc:
-        elapsed_ms = int(
-            (time.monotonic() - start) * 1000
-        )
-
         return (
             "",
-            f"Execution runtime not found: {exc}",
-            elapsed_ms,
+            str(exc),
+            0,
+        )
+
+    except NotImplementedError:
+        # Windows fallback
+        try:
+            result = subprocess.run(
+                cmd,
+                input=stdin,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=LOCAL_TIMEOUT,
+            )
+
+            elapsed = int(
+                (time.monotonic() - start) * 1000
+            )
+
+            return (
+                result.stdout,
+                result.stderr,
+                elapsed,
+            )
+
+        except subprocess.TimeoutExpired:
+            return (
+                "",
+                f"Time Limit Exceeded ({LOCAL_TIMEOUT}s)",
+                LOCAL_TIMEOUT * 1000,
+            )
+
+        except Exception as exc:
+            return (
+                "",
+                str(exc),
+                0,
+            )
+
+    except Exception as exc:
+        return (
+            "",
+            str(exc),
+            0,
         )
 
 
@@ -114,7 +113,7 @@ async def execute_code(
     source_code: str,
     stdin: str = "",
 ) -> Tuple[str, str, int]:
-    """Execute source code and return stdout, stderr, and time."""
+    """Execute source code."""
 
     language = language.lower().strip()
 
@@ -123,71 +122,66 @@ async def execute_code(
     )
 
     try:
+
         if language == "python":
-            src_path = os.path.join(
+            file = os.path.join(
                 tmpdir,
                 "main.py",
             )
 
             with open(
-                src_path,
+                file,
                 "w",
                 encoding="utf-8",
-            ) as file:
-                file.write(source_code)
+            ) as f:
+                f.write(source_code)
 
             return await _run_local(
-                [sys.executable, src_path],
-                stdin or "",
+                [sys.executable, file],
+                stdin,
                 tmpdir,
             )
 
-        if language == "javascript":
-            src_path = os.path.join(
+        elif language == "javascript":
+            file = os.path.join(
                 tmpdir,
                 "main.js",
             )
 
             with open(
-                src_path,
+                file,
                 "w",
                 encoding="utf-8",
-            ) as file:
-                file.write(source_code)
+            ) as f:
+                f.write(source_code)
 
             return await _run_local(
-                ["node", src_path],
-                stdin or "",
+                ["node", file],
+                stdin,
                 tmpdir,
             )
 
-        if language == "java":
-            src_path = os.path.join(
+        elif language == "java":
+            file = os.path.join(
                 tmpdir,
                 "Main.java",
             )
 
             with open(
-                src_path,
+                file,
                 "w",
                 encoding="utf-8",
-            ) as file:
-                file.write(source_code)
+            ) as f:
+                f.write(source_code)
 
-            _, compile_error, compile_time = (
-                await _run_local(
-                    ["javac", src_path],
-                    "",
-                    tmpdir,
-                )
+            _, err, t = await _run_local(
+                ["javac", file],
+                "",
+                tmpdir,
             )
 
-            if compile_error:
-                return (
-                    "",
-                    compile_error,
-                    compile_time,
-                )
+            if err:
+                return "", err, t
 
             return await _run_local(
                 [
@@ -196,59 +190,52 @@ async def execute_code(
                     tmpdir,
                     "Main",
                 ],
-                stdin or "",
+                stdin,
                 tmpdir,
             )
 
-        if language in ("cpp", "c++"):
-            src_path = os.path.join(
+        elif language in (
+            "cpp",
+            "c++",
+        ):
+            src = os.path.join(
                 tmpdir,
                 "main.cpp",
             )
 
-            executable_name = (
+            exe = os.path.join(
+                tmpdir,
                 "main.exe"
                 if os.name == "nt"
-                else "main"
-            )
-
-            binary_path = os.path.join(
-                tmpdir,
-                executable_name,
+                else "main",
             )
 
             with open(
-                src_path,
+                src,
                 "w",
                 encoding="utf-8",
-            ) as file:
-                file.write(source_code)
+            ) as f:
+                f.write(source_code)
 
-            _, compile_error, compile_time = (
-                await _run_local(
-                    [
-                        "g++",
-                        "-O2",
-                        "-std=c++17",
-                        src_path,
-                        "-o",
-                        binary_path,
-                    ],
-                    "",
-                    tmpdir,
-                )
+            _, err, t = await _run_local(
+                [
+                    "g++",
+                    src,
+                    "-std=c++17",
+                    "-O2",
+                    "-o",
+                    exe,
+                ],
+                "",
+                tmpdir,
             )
 
-            if compile_error:
-                return (
-                    "",
-                    compile_error,
-                    compile_time,
-                )
+            if err:
+                return "", err, t
 
             return await _run_local(
-                [binary_path],
-                stdin or "",
+                [exe],
+                stdin,
                 tmpdir,
             )
 
@@ -266,7 +253,7 @@ async def execute_code(
 
 
 def normalize(text: str) -> str:
-    """Normalize code output for comparison."""
+    """Normalize output."""
 
     return "\n".join(
         line.rstrip()

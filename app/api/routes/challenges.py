@@ -5,8 +5,10 @@ from fastapi import (
     Depends,
     status,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_admin
+from app.database.postgres import get_db
 from app.schemas import (
     ApiResponse,
     Challenge,
@@ -14,14 +16,13 @@ from app.schemas import (
     Checkpoint,
     CheckpointCreate,
 )
-from app.services import challenge_service
+from app.services.challenge_service import ChallengeService
 
 
 challenge_router = APIRouter(
     prefix="/challenges",
     tags=["Challenges"],
 )
-
 
 checkpoint_router = APIRouter(
     prefix="/checkpoints",
@@ -38,11 +39,14 @@ checkpoint_router = APIRouter(
 )
 async def create_challenge(
     payload: ChallengeCreate,
+    db: AsyncSession = Depends(get_db),
     _admin: dict = Depends(get_current_admin),
 ) -> ApiResponse[Challenge]:
     """Create a challenge."""
 
-    challenge = await challenge_service.create_challenge(
+    service = ChallengeService(db)
+
+    challenge = await service.create_challenge(
         payload,
     )
 
@@ -61,11 +65,14 @@ async def create_challenge(
 )
 async def create_checkpoint(
     payload: CheckpointCreate,
+    db: AsyncSession = Depends(get_db),
     _admin: dict = Depends(get_current_admin),
 ) -> ApiResponse[Checkpoint]:
     """Create a checkpoint."""
 
-    checkpoint = await challenge_service.create_checkpoint(
+    service = ChallengeService(db)
+
+    checkpoint = await service.create_checkpoint(
         payload,
     )
 

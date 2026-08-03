@@ -1,18 +1,10 @@
-"""Admin API routes."""
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    status,
-)
-
-from app.core.auth import (
-    get_current_admin,
-    get_current_user,
-)
+from app.core.auth import get_current_admin
+from app.database.postgres import get_db
 from app.schemas import ApiResponse
-from app.services import admin_service
-
+from app.services.admin_service import AdminService
 
 router = APIRouter(
     prefix="/admin",
@@ -20,39 +12,29 @@ router = APIRouter(
 )
 
 
-@router.get(
-    "/stats",
-    response_model=ApiResponse[dict],
-    status_code=status.HTTP_200_OK,
-    summary="Get dashboard statistics",
-    description="Return dashboard statistics for administrators.",
-)
+@router.get("/stats")
 async def get_admin_stats(
-    _admin: dict = Depends(get_current_admin),
-) -> ApiResponse[dict]:
-    """Return admin dashboard statistics."""
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    service = AdminService(db)
 
-    stats = await admin_service.get_stats()
+    stats = await service.get_stats()
 
     return ApiResponse(
-        message="Dashboard statistics retrieved successfully",
+        message="Statistics retrieved successfully",
         data=stats,
     )
 
 
-@router.get(
-    "/students",
-    response_model=ApiResponse[list[dict]],
-    status_code=status.HTTP_200_OK,
-    summary="Get students",
-    description="Return all registered students with their progress.",
-)
-async def get_admin_students(
-    _admin: dict = Depends(get_current_admin),
-) -> ApiResponse[list[dict]]:
-    """Return student administration data."""
+@router.get("/students")
+async def get_students(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    service = AdminService(db)
 
-    students = await admin_service.get_students()
+    students = await service.get_students()
 
     return ApiResponse(
         message="Students retrieved successfully",
@@ -60,19 +42,14 @@ async def get_admin_students(
     )
 
 
-@router.get(
-    "/leaderboard",
-    response_model=ApiResponse[list[dict]],
-    status_code=status.HTTP_200_OK,
-    summary="Get leaderboard",
-    description="Return the student XP leaderboard.",
-)
+@router.get("/leaderboard")
 async def get_leaderboard(
-    _user: dict = Depends(get_current_user),
-) -> ApiResponse[list[dict]]:
-    """Return the student XP leaderboard."""
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    service = AdminService(db)
 
-    leaderboard = await admin_service.get_leaderboard()
+    leaderboard = await service.get_leaderboard()
 
     return ApiResponse(
         message="Leaderboard retrieved successfully",

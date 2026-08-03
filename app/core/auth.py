@@ -8,20 +8,19 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.repositories import user_repository
+from app.database.postgres import get_db
+from app.models.user import User
+from app.repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
-bearer_scheme = HTTPBearer(
-    auto_error=False,
-)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def hash_password(
-    password: str,
-) -> str:
+def hash_password(password: str) -> str:
     """Hash a plain-text password."""
 
     return bcrypt.hashpw(
@@ -34,7 +33,7 @@ def verify_password(
     password: str,
     hashed_password: str,
 ) -> bool:
-    """Verify a password."""
+    """Verify password."""
 
     try:
         return bcrypt.checkpw(
@@ -49,14 +48,14 @@ def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """Create a JWT access token."""
+    """Create JWT token."""
 
     expire = datetime.now(
         timezone.utc,
     ) + (
         expires_delta
         or timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
     )
 
@@ -73,15 +72,13 @@ def create_access_token(
 def decode_token(
     token: str,
 ) -> dict:
-    """Decode a JWT."""
+    """Decode JWT token."""
 
     try:
         return jwt.decode(
             token,
             settings.JWT_SECRET.get_secret_value(),
-            algorithms=[
-                settings.JWT_ALGORITHM,
-            ],
+            algorithms=[settings.JWT_ALGORITHM],
         )
 
     except JWTError:
@@ -95,7 +92,8 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(
         bearer_scheme,
     ),
-) -> dict:
+    db: AsyncSession = Depends(get_db),
+) -> User:
     """Return authenticated user."""
 
     if credentials is None:
@@ -116,16 +114,14 @@ async def get_current_user(
             detail="Invalid token",
         )
 
+    user_repository = UserRepository()
+
     user = await user_repository.get_public_by_id(
+        db,
         user_id,
     )
 
-    if not user:
-        logger.warning(
-            "User not found: %s",
-            user_id,
-        )
-
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
@@ -135,13 +131,13 @@ async def get_current_user(
 
 
 async def get_current_admin(
-    user: dict = Depends(
+    user: User = Depends(
         get_current_user,
     ),
-) -> dict:
+) -> User:
     """Return authenticated admin."""
 
-    if user.get("role") != "admin":
+    if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",

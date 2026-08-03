@@ -1,78 +1,82 @@
-"""User database operations."""
+"""User database operations using PostgreSQL."""
 
 import logging
 from typing import Optional
 
-from app.database import get_database
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
 MAX_RESULTS = 500
 
-DEFAULT_PROJECTION = {
-    "_id": 0,
-}
-
-PUBLIC_USER_PROJECTION = {
-    "_id": 0,
-    "hashed_password": 0,
-}
-
 
 class UserRepository:
-    """Repository for user collection operations."""
-
-    @property
-    def collection(self):
-        """Return the users collection."""
-        return get_database().users
+    """Repository for user table operations."""
 
     async def get_by_email(
         self,
+        db: AsyncSession,
         email: str,
-    ) -> Optional[dict]:
+    ) -> Optional[User]:
         logger.debug("Fetching user by email %s", email)
 
-        return await self.collection.find_one(
-            {"email": email},
-            DEFAULT_PROJECTION,
+        result = await db.execute(
+            select(User).where(User.email == email)
         )
+
+        return result.scalar_one_or_none()
 
     async def get_by_id(
         self,
+        db: AsyncSession,
         user_id: str,
-    ) -> Optional[dict]:
+    ) -> Optional[User]:
         logger.debug("Fetching user %s", user_id)
 
-        return await self.collection.find_one(
-            {"id": user_id},
-            DEFAULT_PROJECTION,
+        result = await db.execute(
+            select(User).where(User.id == user_id)
         )
+
+        return result.scalar_one_or_none()
 
     async def get_public_by_id(
         self,
+        db: AsyncSession,
         user_id: str,
-    ) -> Optional[dict]:
+    ) -> Optional[User]:
         logger.debug(
             "Fetching public profile for user %s",
             user_id,
         )
 
-        return await self.collection.find_one(
-            {"id": user_id},
-            PUBLIC_USER_PROJECTION,
+        result = await db.execute(
+            select(User).where(User.id == user_id)
         )
+
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return None
+
+        return user
 
     async def create(
         self,
-        user: dict,
+        db: AsyncSession,
+        user: User,
     ) -> None:
-        logger.debug("Creating user %s", user["id"])
+        logger.debug("Creating user %s", user.id)
 
-        await self.collection.insert_one(user)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
 
     async def increment_xp(
         self,
+        db: AsyncSession,
         user_id: str,
         xp: int,
     ) -> None:
@@ -82,17 +86,15 @@ class UserRepository:
             xp,
         )
 
-        await self.collection.update_one(
-            {"id": user_id},
-            {
-                "$inc": {
-                    "xp": xp,
-                }
-            },
-        )
+        user = await self.get_by_id(db, user_id)
+
+        if user:
+            user.xp += xp
+            await db.commit()
 
     async def increment_xp_and_streak(
         self,
+        db: AsyncSession,
         user_id: str,
         xp: int,
     ) -> None:
@@ -101,52 +103,63 @@ class UserRepository:
             user_id,
         )
 
-        await self.collection.update_one(
-            {"id": user_id},
-            {
-                "$inc": {
-                    "xp": xp,
-                    "streak_count": 1,
-                }
-            },
-        )
+        user = await self.get_by_id(db, user_id)
 
-    async def count_students(self) -> int:
+        if user:
+            user.xp += xp
+            user.streak_count += 1
+            await db.commit()
+
+    async def count_students(
+        self,
+        db: AsyncSession,
+    ) -> int:
         logger.debug("Counting students")
 
-        return await self.collection.count_documents(
-            {"role": "student"}
+        result = await db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(User.role == "student")
         )
 
-    async def get_students(self) -> list[dict]:
+        return result.scalar_one()
+
+    async def get_students(
+        self,
+        db: AsyncSession,
+    ) -> list[User]:
         logger.debug("Fetching student list")
 
-        return await self.collection.find(
-            {"role": "student"},
-            PUBLIC_USER_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        result = await db.execute(
+            select(User)
+            .where(User.role == "student")
+            .limit(MAX_RESULTS)
+        )
+
+        return list(result.scalars().all())
 
     async def get_leaderboard(
         self,
+        db: AsyncSession,
         limit: int = 20,
-    ) -> list[dict]:
+    ) -> list[User]:
         logger.debug(
             "Fetching leaderboard (limit=%s)",
             limit,
         )
 
-        return (
-            await self.collection.find(
-                {"role": "student"},
-                PUBLIC_USER_PROJECTION,
-            )
-            .sort("xp", -1)
+        result = await db.execute(
+            select(User)
+            .where(User.role == "student")
+            .order_by(User.xp.desc())
             .limit(limit)
-            .to_list(limit)
         )
+
+        return list(result.scalars().all())
 
     async def get_leaderboard_summary(
         self,
+        db: AsyncSession,
         user_id: str,
     ) -> dict:
         """Return leaderboard summary."""
@@ -156,12 +169,18 @@ class UserRepository:
             user_id,
         )
 
-        leaderboard = await self.get_leaderboard(100)
+        leaderboard = await self.get_leaderboard(
+            db,
+            limit=100,
+        )
 
         rank = None
 
-        for index, user in enumerate(leaderboard, start=1):
-            if user["id"] == user_id:
+        for index, user in enumerate(
+            leaderboard,
+            start=1,
+        ):
+            if user.id == user_id:
                 rank = index
                 break
 

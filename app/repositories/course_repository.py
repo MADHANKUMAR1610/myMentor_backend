@@ -3,119 +3,85 @@
 import logging
 from typing import Optional
 
-from app.database import get_database
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.course import Course
+from app.models.enrollment import Enrollment
 
 logger = logging.getLogger(__name__)
 
 MAX_RESULTS = 500
 
-DEFAULT_PROJECTION = {
-    "_id": 0,
-}
-
 
 class CourseRepository:
     """Repository for course and enrollment operations."""
 
-    @property
-    def course_collection(self):
-        """Return courses collection."""
-        return get_database().courses
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-    @property
-    def enrollment_collection(self):
-        """Return enrollments collection."""
-        return get_database().enrollments
-
-    async def get_all(
-        self,
-    ) -> list[dict]:
-        """Return all courses."""
-
+    async def get_all(self) -> list[Course]:
         logger.debug("Fetching all courses")
 
-        return await self.course_collection.find(
-            {},
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        result = await self.db.execute(
+            select(Course).limit(MAX_RESULTS)
+        )
+        return result.scalars().all()
 
     async def get_by_id(
         self,
         course_id: str,
-    ) -> Optional[dict]:
-        """Return a course by ID."""
+    ) -> Optional[Course]:
 
-        logger.debug(
-            "Fetching course %s",
-            course_id,
-        )
+        logger.debug("Fetching course %s", course_id)
 
-        return await self.course_collection.find_one(
-            {
-                "id": course_id,
-            },
-            DEFAULT_PROJECTION,
+        result = await self.db.execute(
+            select(Course).where(Course.id == course_id)
         )
+        return result.scalar_one_or_none()
 
     async def get_by_ids(
         self,
         course_ids: list[str],
-    ) -> list[dict]:
-        """Return multiple courses by IDs."""
+    ) -> list[Course]:
 
-        logger.debug(
-            "Fetching %s courses",
-            len(course_ids),
+        logger.debug("Fetching %s courses", len(course_ids))
+
+        result = await self.db.execute(
+            select(Course).where(Course.id.in_(course_ids))
         )
-
-        return await self.course_collection.find(
-            {
-                "id": {
-                    "$in": course_ids,
-                }
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        return result.scalars().all()
 
     async def create(
         self,
-        course: dict,
+        course: Course,
     ) -> None:
-        """Insert a new course."""
 
-        logger.debug(
-            "Creating course %s",
-            course["id"],
-        )
+        logger.debug("Creating course %s", course.id)
 
-        await self.course_collection.insert_one(
-            course,
-        )
+        self.db.add(course)
+        await self.db.commit()
+        await self.db.refresh(course)
 
     async def get_user_enrollments(
         self,
         user_id: str,
-    ) -> list[dict]:
-        """Return all enrollments for a user."""
+    ) -> list[Enrollment]:
 
-        logger.debug(
-            "Fetching enrollments for user %s",
-            user_id,
+        logger.debug("Fetching enrollments for user %s", user_id)
+
+        result = await self.db.execute(
+            select(Enrollment).where(
+                Enrollment.user_id == user_id
+            )
         )
-
-        return await self.enrollment_collection.find(
-            {
-                "user_id": user_id,
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        return result.scalars().all()
 
     async def get_enrollment(
         self,
         user_id: str,
         course_id: str,
-    ) -> Optional[dict]:
-        """Return a user's enrollment."""
+    ) -> Optional[Enrollment]:
 
         logger.debug(
             "Checking enrollment. User=%s Course=%s",
@@ -123,88 +89,71 @@ class CourseRepository:
             course_id,
         )
 
-        return await self.enrollment_collection.find_one(
-            {
-                "user_id": user_id,
-                "course_id": course_id,
-            },
-            DEFAULT_PROJECTION,
+        result = await self.db.execute(
+            select(Enrollment).where(
+                Enrollment.user_id == user_id,
+                Enrollment.course_id == course_id,
+            )
         )
+
+        return result.scalar_one_or_none()
 
     async def create_enrollment(
         self,
-        enrollment: dict,
+        enrollment: Enrollment,
     ) -> None:
-        """Insert a new enrollment."""
 
         logger.debug(
             "Creating enrollment %s",
-            enrollment["id"],
+            enrollment.id,
         )
 
-        await self.enrollment_collection.insert_one(
-            enrollment,
+        self.db.add(enrollment)
+        await self.db.commit()
+        await self.db.refresh(enrollment)
+
+    async def count_courses(self) -> int:
+
+        logger.debug("Counting courses")
+
+        result = await self.db.execute(
+            select(func.count()).select_from(Course)
         )
 
-    async def count_courses(
-        self,
-    ) -> int:
-        """Return total course count."""
-
-        logger.debug(
-            "Counting courses",
-        )
-
-        return await self.course_collection.count_documents(
-            {}
-        )
+        return result.scalar_one()
 
     async def get_dashboard_courses(
         self,
         user_id: str,
     ) -> list[dict]:
-        """Return dashboard course cards for a user."""
 
         logger.debug(
             "Fetching dashboard courses for user=%s",
             user_id,
         )
 
-        enrollments = await self.get_user_enrollments(
-            user_id,
-        )
+        enrollments = await self.get_user_enrollments(user_id)
 
         if not enrollments:
             return []
 
-        course_ids = [
-            enrollment["course_id"]
-            for enrollment in enrollments
-        ]
+        course_ids = [e.course_id for e in enrollments]
 
-        courses = await self.get_by_ids(
-            course_ids,
-        )
+        courses = await self.get_by_ids(course_ids)
 
-        dashboard_courses = []
+        dashboard = []
 
         for course in courses:
-            dashboard_courses.append(
+            dashboard.append(
                 {
-                    "course_id": course["id"],
-                    "title": course.get("title"),
-                    "thumbnail": course.get("thumbnail"),
-                    "description": course.get("description"),
+                    "course_id": course.id,
+                    "title": course.title,
+                    "thumbnail": course.thumbnail_url,
+                    "description": course.description,
                     "progress_percentage": 0,
                     "completed_lessons": 0,
-                    "total_lessons": course.get(
-                        "total_levels",
-                        0,
-                    ),
+                    "total_lessons": 0,
                 }
             )
 
-        return dashboard_courses
-
-
-course_repository = CourseRepository()
+        return dashboard

@@ -3,10 +3,7 @@
 from functools import lru_cache
 
 from pydantic import SecretStr
-from pydantic_settings import (
-    BaseSettings,
-    SettingsConfigDict,
-)
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -16,8 +13,12 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
 
-    DATABASE_URL: str
-    DATABASE_NAME: str
+    # MongoDB (keep temporarily while migrating)
+    MONGO_DATABASE_URL: str | None = None
+    MONGO_DATABASE_NAME: str | None = None
+
+    # PostgreSQL
+    POSTGRES_DATABASE_URL: str
 
     JWT_SECRET: SecretStr = SecretStr(
         "change-this-secret"
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://my-mentor-lms.onrender.com",
     ]
 
     model_config = SettingsConfigDict(
@@ -39,8 +41,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return cached settings instance."""
-
     return Settings()
 
 

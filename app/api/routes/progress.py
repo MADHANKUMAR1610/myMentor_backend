@@ -6,14 +6,19 @@ from fastapi import (
     status,
 )
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.auth import get_current_user
+from app.database.postgres import get_db
+
 from app.schemas import (
     ApiResponse,
     CompleteCheckpointRequest,
     CompleteLevelRequest,
     VideoProgressRequest,
 )
-from app.services import progress_service
+
+from app.services.progress_service import ProgressService
 
 
 router = APIRouter(
@@ -31,12 +36,13 @@ router = APIRouter(
 )
 async def get_dashboard(
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    dashboard = await progress_service.get_dashboard(
+    service = ProgressService(db)
+
+    dashboard = await service.get_dashboard(
         current_user,
     )
-
-    print("Dashboard =", dashboard)
 
     return ApiResponse(
         message="Dashboard retrieved successfully",
@@ -54,10 +60,12 @@ async def get_dashboard(
 async def complete_checkpoint(
     body: CompleteCheckpointRequest,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
-    """Complete a checkpoint."""
 
-    result = await progress_service.complete_checkpoint(
+    service = ProgressService(db)
+
+    result = await service.complete_checkpoint(
         body,
         current_user,
     )
@@ -78,10 +86,12 @@ async def complete_checkpoint(
 async def update_video_progress(
     body: VideoProgressRequest,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
-    """Update video watch progress."""
 
-    result = await progress_service.update_video_progress(
+    service = ProgressService(db)
+
+    result = await service.update_video_progress(
         body,
         current_user,
     )
@@ -102,10 +112,12 @@ async def update_video_progress(
 async def complete_level(
     body: CompleteLevelRequest,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
-    """Complete a level."""
 
-    result = await progress_service.complete_level(
+    service = ProgressService(db)
+
+    result = await service.complete_level(
         body,
         current_user,
     )

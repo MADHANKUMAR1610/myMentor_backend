@@ -6,9 +6,11 @@ from fastapi import (
     status,
 )
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
-from app.services import certificate_service
+from app.database.postgres import get_db
+from app.services.certificate_service import CertificateService
 
 
 router = APIRouter(
@@ -43,23 +45,23 @@ router = APIRouter(
 )
 async def download_certificate(
     course_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Download a course completion certificate."""
 
-    certificate_buffer = (
-        await certificate_service.generate_certificate(
-            course_id,
-            current_user,
-        )
+    service = CertificateService(db)
+
+    certificate_buffer = await service.generate_certificate(
+        course_id,
+        current_user,
     )
 
     return StreamingResponse(
         certificate_buffer,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": (
+            "Content-Disposition":
                 f'attachment; filename="digipin-certificate-{course_id}.pdf"'
-            )
         },
     )

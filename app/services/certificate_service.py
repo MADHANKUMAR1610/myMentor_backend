@@ -11,11 +11,11 @@ from app.core.exceptions import (
     ForbiddenException,
     NotFoundException,
 )
-from app.repositories import (
-    course_repository,
-    level_repository,
-    progress_repository,
-)
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.repositories.course_repository import CourseRepository
+from app.repositories.level_repository import LevelRepository
+from app.repositories.progress_repository import ProgressRepository
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 class CertificateService:
     """Validate course completion and generate certificates."""
 
-    def __init__(self) -> None:
-        self.course_repository = course_repository
-        self.level_repository = level_repository
-        self.progress_repository = progress_repository
+    def __init__(self, db: AsyncSession):
+        self.course_repository = CourseRepository(db)
+        self.level_repository = LevelRepository(db)
+        self.progress_repository = ProgressRepository(db)
 
     async def generate_certificate(
         self,
@@ -37,7 +37,7 @@ class CertificateService:
 
         logger.info(
             "Generating certificate for user %s and course %s",
-            user["id"],
+            user.id,
             course_id,
         )
 
@@ -64,7 +64,7 @@ class CertificateService:
         completed_levels = (
             await self.progress_repository
             .count_completed_by_user_and_course(
-                user["id"],
+                user.id,
                 course_id,
             )
         )
@@ -75,7 +75,7 @@ class CertificateService:
         ):
             logger.warning(
                 "Certificate denied. User %s completed %s/%s levels.",
-                user["id"],
+                user.id,
                 completed_levels,
                 total_levels,
             )
@@ -85,13 +85,13 @@ class CertificateService:
             )
 
         buffer = self._create_pdf(
-            user_name=user["name"],
-            course_title=course["title"],
+            user_name=user.name,
+            course_title=course.title,
         )
 
         logger.info(
             "Certificate generated successfully for user %s",
-            user["id"],
+           user.id ,
         )
 
         return buffer
@@ -249,6 +249,3 @@ class CertificateService:
         buffer.seek(0)
 
         return buffer
-
-
-certificate_service = CertificateService()

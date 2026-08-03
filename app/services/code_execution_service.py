@@ -2,24 +2,20 @@
 
 import logging
 
-from app.core.exceptions import NotFoundException
-from app.repositories import (
-    challenge_repository,
-    progress_repository,
-)
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.submission import Submission
+from app.repositories.challenge_repository import ChallengeRepository
+from app.repositories.progress_repository import ProgressRepository
 from app.schemas import (
     RunRequest,
     RunResult,
     SubmissionRequest,
     SubmissionResult,
     TestCaseResult,
-    gen_id,
-    utc_now_iso,
 )
-from app.utils.executor import (
-    execute_code,
-    normalize,
-)
+from app.schemas.common import gen_id
+from app.utils.executor import execute_code, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +23,9 @@ logger = logging.getLogger(__name__)
 class CodeExecutionService:
     """Handle code execution and submission evaluation."""
 
-    def __init__(self) -> None:
-        self.challenge_repository = challenge_repository
-        self.progress_repository = progress_repository
+    def __init__(self, db: AsyncSession):
+        self.challenge_repository = ChallengeRepository(db)
+        self.progress_repository = ProgressRepository(db)
 
     async def run_code(
         self,
@@ -37,20 +33,10 @@ class CodeExecutionService:
     ) -> RunResult:
         """Execute code without evaluation."""
 
-        logger.info(
-            "Running %s code",
-            request.language,
-        )
-
         stdout, stderr, execution_time = await execute_code(
             request.language,
             request.source_code,
             request.stdin or "",
-        )
-
-        logger.info(
-            "Code execution completed in %sms",
-            execution_time,
         )
 
         return RunResult(
@@ -64,176 +50,137 @@ class CodeExecutionService:
         request: SubmissionRequest,
         user_id: str,
     ) -> SubmissionResult:
-        """Evaluate code against challenge test cases."""
+        """Evaluate submitted code."""
+        try:
+            print("========== STEP 1 ==========")
 
-        logger.info(
-            "User %s submitted challenge %s",
-            user_id,
-            request.challenge_id,
-        )
-
-        challenge = (
-            await self.challenge_repository.get_challenge_by_id(
+            challenge = await self.challenge_repository.get_challenge_by_id(
                 request.challenge_id
             )
-        )
 
-        if not challenge:
-            logger.warning(
-                "Challenge not found: %s",
-                request.challenge_id,
-            )
+            print("Challenge:", challenge)
 
-            raise NotFoundException(
-                "Challenge not found"
-            )
+            if challenge is None:
+                raise Exception("Challenge not found")
 
-        test_cases = challenge.get(
-            "test_cases",
-            [],
-        )
+            test_cases = challenge.test_cases or []
 
-        if not test_cases:
-            test_cases = [
-                {
-                    "input": "",
-                    "expected_output": challenge.get(
-                        "expected_output",
-                        "",
-                    ),
-                    "is_hidden": False,
-                }
-            ]
+            if not test_cases:
+                test_cases = [
+                    {
+                        "input": "",
+                        "expected_output": challenge.expected_output,
+                        "is_hidden": False,
+                    }
+                ]
 
-        test_results: list[TestCaseResult] = []
-        total_time = 0
+            test_results = []
+            total_time = 0
 
-        for test_case in test_cases:
-            result, execution_time = (
-                await self._execute_test_case(
-                    request,
-                    test_case,
+            for test_case in test_cases:
+
+                stdout, stderr, execution_time = await execute_code(
+                    request.language,
+                    request.source_code,
+                    test_case.get("input", ""),
                 )
+
+                total_time += execution_time
+
+                passed = (
+                    normalize(stdout)
+                    == normalize(test_case["expected_output"])
+                    and not stderr.strip()
+                )
+
+                test_results.append(
+                    TestCaseResult(
+                        input=(
+                            "(hidden)"
+                            if test_case.get("is_hidden")
+                            else test_case.get("input", "")
+                        ),
+                        expected=(
+                            "(hidden)"
+                            if test_case.get("is_hidden")
+                            else test_case["expected_output"]
+                        ),
+                        actual=(
+                            "passed"
+                            if test_case.get("is_hidden") and passed
+                            else (
+                                "failed"
+                                if test_case.get("is_hidden")
+                                else stdout
+                            )
+                        ),
+                        passed=passed,
+                        is_hidden=test_case.get(
+                            "is_hidden",
+                            False,
+                        ),
+                    )
+                )
+
+            passed_count = sum(
+                result.passed
+                for result in test_results
             )
 
-            test_results.append(result)
-            total_time += execution_time
+            total_count = len(test_results)
 
-        passed_count = sum(
-            result.passed
-            for result in test_results
-        )
-
-        total_count = len(test_results)
-
-        all_passed = (
-            passed_count == total_count
-        )
-
-        xp_earned = (
-            challenge.get(
-                "xp",
-                0,
+            all_passed = (
+                passed_count == total_count
             )
-            if all_passed
-            else 0
-        )
 
-        submission_document = {
-            "id": gen_id(),
-            "user_id": user_id,
-            "challenge_id": request.challenge_id,
-            "language": request.language,
-            "source_code": request.source_code,
-            "passed": all_passed,
-            "passed_count": passed_count,
-            "total_count": total_count,
-            "xp_earned": xp_earned,
-            "time_ms": total_time,
-            "created_at": utc_now_iso(),
-        }
+            xp_earned = (
+                challenge.xp
+                if all_passed
+                else 0
+            )
 
-        await self.progress_repository.create_submission(
-            submission_document
-        )
+            print("========== STEP 2 ==========")
 
-        logger.info(
-            "Submission completed. Passed=%s (%s/%s)",
-            all_passed,
-            passed_count,
-            total_count,
-        )
+            submission = Submission(
+                id=gen_id(),
+                user_id=user_id,
+                challenge_id=request.challenge_id,
+                source_code=request.source_code,
+                language=request.language,
+                stdout="",
+                stderr="",
+                passed=all_passed,
+                passed_count=passed_count,
+                total_count=total_count,
+                xp_earned=xp_earned,
+                time_ms=total_time,
+            )
 
-        return SubmissionResult(
-            passed=all_passed,
-            stdout="",
-            stderr="",
-            time_ms=total_time,
-            test_results=test_results,
-            passed_count=passed_count,
-            total_count=total_count,
-            xp_earned=xp_earned,
-        )
+            print("Saving submission...")
 
-    async def _execute_test_case(
-        self,
-        request: SubmissionRequest,
-        test_case: dict,
-    ) -> tuple[TestCaseResult, int]:
-        """Execute and evaluate a single test case."""
+            await self.progress_repository.create_submission(
+                submission
+            )
 
-        stdout, stderr, execution_time = await execute_code(
-            request.language,
-            request.source_code,
-            test_case.get(
-                "input",
-                "",
-            ),
-        )
+            print("Submission saved")
 
-        expected_output = test_case[
-            "expected_output"
-        ]
+            return SubmissionResult(
+                passed=all_passed,
+                stdout="",
+                stderr="",
+                time_ms=total_time,
+                test_results=test_results,
+                passed_count=passed_count,
+                total_count=total_count,
+                xp_earned=xp_earned,
+            )
 
-        passed = (
-            normalize(stdout)
-            == normalize(expected_output)
-            and not stderr.strip()
-        )
+        except Exception as e:
+            import traceback
 
-        is_hidden = test_case.get(
-            "is_hidden",
-            False,
-        )
+            print("\n========== SERVICE ERROR ==========")
+            traceback.print_exc()
+            print(repr(e))
+            print("===================================\n")
 
-        result = TestCaseResult(
-            input=(
-                "(hidden)"
-                if is_hidden
-                else test_case.get(
-                    "input",
-                    "",
-                )
-            ),
-            expected=(
-                "(hidden)"
-                if is_hidden
-                else expected_output
-            ),
-            actual=(
-                (
-                    "passed"
-                    if passed
-                    else "failed"
-                )
-                if is_hidden
-                else stdout
-            ),
-            passed=passed,
-            is_hidden=is_hidden,
-        )
-
-        return result, execution_time
-
-
-code_execution_service = CodeExecutionService()
+            raise

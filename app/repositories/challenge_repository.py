@@ -3,34 +3,27 @@
 import logging
 from typing import Optional
 
-from app.database import get_database
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.challenge import Challenge
+from app.models.checkpoint import Checkpoint
 
 logger = logging.getLogger(__name__)
 
 MAX_RESULTS = 500
 
-DEFAULT_PROJECTION = {
-    "_id": 0,
-}
-
 
 class ChallengeRepository:
     """Repository for challenge and checkpoint operations."""
 
-    @property
-    def challenge_collection(self):
-        """Return challenges collection."""
-        return get_database().challenges
-
-    @property
-    def checkpoint_collection(self):
-        """Return checkpoints collection."""
-        return get_database().checkpoints
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
     async def get_challenge_by_id(
         self,
         challenge_id: str,
-    ) -> Optional[dict]:
+    ) -> Optional[Challenge]:
         """Return a challenge by its ID."""
 
         logger.debug(
@@ -38,17 +31,18 @@ class ChallengeRepository:
             challenge_id,
         )
 
-        return await self.challenge_collection.find_one(
-            {
-                "id": challenge_id,
-            },
-            DEFAULT_PROJECTION,
+        result = await self.db.execute(
+            select(Challenge).where(
+                Challenge.id == challenge_id
+            )
         )
+
+        return result.scalar_one_or_none()
 
     async def get_challenges_by_ids(
         self,
         challenge_ids: list[str],
-    ) -> list[dict]:
+    ) -> list[Challenge]:
         """Return multiple challenges by IDs."""
 
         logger.debug(
@@ -56,34 +50,33 @@ class ChallengeRepository:
             len(challenge_ids),
         )
 
-        return await self.challenge_collection.find(
-            {
-                "id": {
-                    "$in": challenge_ids,
-                }
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        result = await self.db.execute(
+            select(Challenge).where(
+                Challenge.id.in_(challenge_ids)
+            )
+        )
+
+        return result.scalars().all()
 
     async def create_challenge(
         self,
-        challenge: dict,
+        challenge: Challenge,
     ) -> None:
         """Insert a new challenge."""
 
         logger.debug(
             "Creating challenge %s",
-            challenge["id"],
+            challenge.id,
         )
 
-        await self.challenge_collection.insert_one(
-            challenge,
-        )
+        self.db.add(challenge)
+        await self.db.commit()
+        await self.db.refresh(challenge)
 
     async def get_checkpoint_by_id(
         self,
         checkpoint_id: str,
-    ) -> Optional[dict]:
+    ) -> Optional[Checkpoint]:
         """Return a checkpoint by its ID."""
 
         logger.debug(
@@ -91,17 +84,18 @@ class ChallengeRepository:
             checkpoint_id,
         )
 
-        return await self.checkpoint_collection.find_one(
-            {
-                "id": checkpoint_id,
-            },
-            DEFAULT_PROJECTION,
+        result = await self.db.execute(
+            select(Checkpoint).where(
+                Checkpoint.id == checkpoint_id
+            )
         )
+
+        return result.scalar_one_or_none()
 
     async def get_checkpoints_by_level(
         self,
         level_id: str,
-    ) -> list[dict]:
+    ) -> list[Checkpoint]:
         """Return all checkpoints for a level."""
 
         logger.debug(
@@ -109,28 +103,28 @@ class ChallengeRepository:
             level_id,
         )
 
-        return await self.checkpoint_collection.find(
-            {
-                "level_id": level_id,
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        result = await self.db.execute(
+            select(Checkpoint).where(
+                Checkpoint.level_id == level_id
+            )
+        )
+
+        return result.scalars().all()
 
     async def create_checkpoint(
         self,
-        checkpoint: dict,
+        checkpoint: Checkpoint,
     ) -> None:
         """Insert a new checkpoint."""
 
         logger.debug(
             "Creating checkpoint %s",
-            checkpoint["id"],
+            checkpoint.id,
         )
 
-        await self.checkpoint_collection.insert_one(
-            checkpoint,
-        )
-
+        self.db.add(checkpoint)
+        await self.db.commit()
+        await self.db.refresh(checkpoint)
     async def count_challenges(
         self,
     ) -> int:
@@ -140,9 +134,8 @@ class ChallengeRepository:
             "Counting challenges",
         )
 
-        return await self.challenge_collection.count_documents(
-            {}
+        result = await self.db.execute(
+            select(func.count()).select_from(Challenge)
         )
 
-
-challenge_repository = ChallengeRepository()
+        return result.scalar_one()

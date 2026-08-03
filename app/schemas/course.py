@@ -1,11 +1,7 @@
-"""Course schemas."""
-
+from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
-
-from app.schemas.common import gen_id, utc_now_iso
-
+from pydantic import BaseModel, ConfigDict
 
 class CourseBase(BaseModel):
     title: str
@@ -26,5 +22,8 @@ class CourseCreate(CourseBase):
 
 
 class Course(CourseBase):
-    id: str = Field(default_factory=gen_id)
-    created_at: str = Field(default_factory=utc_now_iso)
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+    updated_at: datetime

@@ -5,17 +5,19 @@ from fastapi import (
     Depends,
     status,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import (
     get_current_admin,
     get_current_user,
 )
+from app.database.postgres import get_db
 from app.schemas import (
     ApiResponse,
     Course,
     CourseCreate,
 )
-from app.services import course_service
+from app.services.course_service import CourseService
 
 
 router = APIRouter(
@@ -36,11 +38,14 @@ router = APIRouter(
 )
 async def list_courses(
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[list[dict]]:
     """Return available courses."""
 
-    courses = await course_service.list_courses(
-        current_user["id"],
+    service = CourseService(db)
+
+    courses = await service.list_courses(
+        current_user.id,
     )
 
     return ApiResponse(
@@ -62,12 +67,15 @@ async def list_courses(
 async def get_course(
     course_id: str,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
     """Return course details."""
 
-    course = await course_service.get_course(
+    service = CourseService(db)
+
+    course = await service.get_course(
         course_id,
-        current_user["id"],
+        current_user.id,
     )
 
     return ApiResponse(
@@ -85,11 +93,14 @@ async def get_course(
 )
 async def create_course(
     payload: CourseCreate,
+    db: AsyncSession = Depends(get_db),
     _admin: dict = Depends(get_current_admin),
 ) -> ApiResponse[Course]:
     """Create a course."""
 
-    course = await course_service.create_course(
+    service = CourseService(db)
+
+    course = await service.create_course(
         payload,
     )
 
@@ -111,12 +122,15 @@ async def create_course(
 async def enroll_course(
     course_id: str,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
     """Enroll the authenticated user."""
 
-    result = await course_service.enroll(
+    service = CourseService(db)
+
+    result = await service.enroll(
         course_id,
-        current_user["id"],
+        current_user.id,
     )
 
     return ApiResponse(

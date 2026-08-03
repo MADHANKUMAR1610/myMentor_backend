@@ -2,13 +2,18 @@
 
 import logging
 
-from app.repositories import challenge_repository
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.challenge import Challenge as ChallengeModel
+from app.models.checkpoint import Checkpoint as CheckpointModel
+from app.repositories.challenge_repository import ChallengeRepository
 from app.schemas import (
     Challenge,
     ChallengeCreate,
     Checkpoint,
     CheckpointCreate,
 )
+from app.schemas.common import gen_id
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +21,8 @@ logger = logging.getLogger(__name__)
 class ChallengeService:
     """Handle challenge and checkpoint business logic."""
 
-    def __init__(self) -> None:
-        self.challenge_repository = challenge_repository
+    def __init__(self, db: AsyncSession) -> None:
+        self.challenge_repository = ChallengeRepository(db)
 
     async def create_challenge(
         self,
@@ -30,12 +35,13 @@ class ChallengeService:
             payload.title,
         )
 
-        challenge = Challenge(
-            **payload.model_dump()
+        challenge = ChallengeModel(
+            id=gen_id(),
+            **payload.model_dump(),
         )
 
         await self.challenge_repository.create_challenge(
-            challenge.model_dump()
+            challenge,
         )
 
         logger.info(
@@ -43,7 +49,7 @@ class ChallengeService:
             challenge.id,
         )
 
-        return challenge
+        return Challenge.model_validate(challenge)
 
     async def create_checkpoint(
         self,
@@ -56,12 +62,13 @@ class ChallengeService:
             payload.level_id,
         )
 
-        checkpoint = Checkpoint(
-            **payload.model_dump()
+        checkpoint = CheckpointModel(
+            id=gen_id(),
+            **payload.model_dump(),
         )
 
         await self.challenge_repository.create_checkpoint(
-            checkpoint.model_dump()
+            checkpoint,
         )
 
         logger.info(
@@ -69,7 +76,4 @@ class ChallengeService:
             checkpoint.id,
         )
 
-        return checkpoint
-
-
-challenge_service = ChallengeService()
+        return Checkpoint.model_validate(checkpoint)

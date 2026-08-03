@@ -1,22 +1,20 @@
 """Level API routes."""
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    status,
-)
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import (
     get_current_admin,
     get_current_user,
 )
+from app.database.postgres import get_db
+from app.models.user import User
 from app.schemas import (
     ApiResponse,
     Level,
     LevelCreate,
 )
-from app.services import level_service
-
+from app.services.level_service import LevelService
 
 router = APIRouter(
     prefix="/levels",
@@ -36,9 +34,12 @@ router = APIRouter(
 )
 async def get_level(
     level_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:
     """Return level details."""
+
+    level_service = LevelService(db)
 
     level = await level_service.get_level(
         level_id,
@@ -60,9 +61,12 @@ async def get_level(
 )
 async def create_level(
     payload: LevelCreate,
-    _admin: dict = Depends(get_current_admin),
+    _admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[Level]:
     """Create a new level."""
+
+    level_service = LevelService(db)
 
     level = await level_service.create_level(
         payload,

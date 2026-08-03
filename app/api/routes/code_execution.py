@@ -5,8 +5,10 @@ from fastapi import (
     Depends,
     status,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.database.postgres import get_db
 from app.schemas import (
     ApiResponse,
     RunRequest,
@@ -14,8 +16,7 @@ from app.schemas import (
     SubmissionRequest,
     SubmissionResult,
 )
-from app.services import code_execution_service
-
+from app.services.code_execution_service import CodeExecutionService
 
 router = APIRouter(
     prefix="/code",
@@ -35,11 +36,14 @@ router = APIRouter(
 )
 async def run_code(
     request: RunRequest,
-    _user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _user=Depends(get_current_user),
 ) -> ApiResponse[RunResult]:
     """Execute source code."""
 
-    result = await code_execution_service.run_code(
+    service = CodeExecutionService(db)
+
+    result = await service.run_code(
         request,
     )
 
@@ -49,29 +53,30 @@ async def run_code(
     )
 
 
-@router.post(
-    "/submit",
-    response_model=ApiResponse[SubmissionResult],
-    status_code=status.HTTP_200_OK,
-    summary="Submit challenge solution",
-    description=(
-        "Evaluate submitted source code against "
-        "the challenge test cases and return the "
-        "submission result."
-    ),
-)
+@router.post("/submit")
 async def submit_code(
     request: SubmissionRequest,
-    current_user: dict = Depends(get_current_user),
-) -> ApiResponse[SubmissionResult]:
-    """Submit code for challenge evaluation."""
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    try:
+        print("========== API HIT ==========")
+        print("User:", current_user)
 
-    result = await code_execution_service.submit_code(
-        request,
-        current_user["id"],
-    )
+        service = CodeExecutionService(db)
 
-    return ApiResponse(
-        message="Code submitted successfully",
-        data=result,
-    )
+        result = await service.submit_code(
+            request,
+            current_user.id,   # Use .id, not ["id"]
+        )
+
+        return ApiResponse(
+            message="Success",
+            data=result,
+        )
+
+    except Exception as e:
+        print("========== EXCEPTION ==========")
+        traceback.print_exc()
+        print("ERROR:", repr(e))
+        raise

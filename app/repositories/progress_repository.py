@@ -1,37 +1,31 @@
 """Progress and submission database operations."""
 
 import logging
+from datetime import datetime
 from typing import Optional
 
-from app.database import get_database
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.progress import Progress
+from app.models.submission import Submission
 
 logger = logging.getLogger(__name__)
 
 MAX_RESULTS = 1000
 
-DEFAULT_PROJECTION = {
-    "_id": 0,
-}
-
 
 class ProgressRepository:
     """Repository for progress and submission operations."""
 
-    @property
-    def progress_collection(self):
-        """Return progress collection."""
-        return get_database().progress
-
-    @property
-    def submission_collection(self):
-        """Return submissions collection."""
-        return get_database().submissions
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
     async def get_by_user_and_level(
         self,
         user_id: str,
         level_id: str,
-    ) -> Optional[dict]:
+    ) -> Optional[Progress]:
         """Return progress for a user and level."""
 
         logger.debug(
@@ -40,19 +34,20 @@ class ProgressRepository:
             level_id,
         )
 
-        return await self.progress_collection.find_one(
-            {
-                "user_id": user_id,
-                "level_id": level_id,
-            },
-            DEFAULT_PROJECTION,
+        result = await self.db.execute(
+            select(Progress).where(
+                Progress.user_id == user_id,
+                Progress.level_id == level_id,
+            )
         )
+
+        return result.scalar_one_or_none()
 
     async def get_by_user_and_course(
         self,
         user_id: str,
         course_id: str,
-    ) -> list[dict]:
+    ) -> list[Progress]:
         """Return all progress records for a course."""
 
         logger.debug(
@@ -61,18 +56,19 @@ class ProgressRepository:
             course_id,
         )
 
-        return await self.progress_collection.find(
-            {
-                "user_id": user_id,
-                "course_id": course_id,
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        result = await self.db.execute(
+            select(Progress).where(
+                Progress.user_id == user_id,
+                Progress.course_id == course_id,
+            )
+        )
+
+        return result.scalars().all()
 
     async def get_by_user(
         self,
         user_id: str,
-    ) -> list[dict]:
+    ) -> list[Progress]:
         """Return all progress records for a user."""
 
         logger.debug(
@@ -80,52 +76,55 @@ class ProgressRepository:
             user_id,
         )
 
-        return await self.progress_collection.find(
-            {
-                "user_id": user_id,
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        result = await self.db.execute(
+            select(Progress).where(
+                Progress.user_id == user_id,
+            )
+        )
+
+        return result.scalars().all()
 
     async def save(
         self,
-        user_id: str,
-        level_id: str,
-        progress: dict,
+        progress: Progress,
     ) -> None:
-        """Insert or update a progress document."""
+        """Insert or update progress."""
 
         logger.debug(
             "Saving progress. User=%s Level=%s",
-            user_id,
-            level_id,
+            progress.user_id,
+            progress.level_id,
         )
 
-        await self.progress_collection.update_one(
-            {
-                "user_id": user_id,
-                "level_id": level_id,
-            },
-            {
-                "$set": progress,
-            },
-            upsert=True,
+        existing = await self.get_by_user_and_level(
+            progress.user_id,
+            progress.level_id,
         )
+
+        if existing:
+            existing.video_watched_seconds = progress.video_watched_seconds
+            existing.video_completed = progress.video_completed
+            existing.completed = progress.completed
+            existing.xp_earned = progress.xp_earned
+            existing.updated_at = datetime.utcnow()
+        else:
+            self.db.add(progress)
+
+        await self.db.commit()
 
     async def create_submission(
         self,
-        submission: dict,
+        submission: Submission,
     ) -> None:
         """Insert a new code submission."""
 
         logger.debug(
             "Creating submission %s",
-            submission["id"],
+            submission.id,
         )
 
-        await self.submission_collection.insert_one(
-            submission,
-        )
+        self.db.add(submission)
+        await self.db.commit()
 
     async def count_completed_levels(
         self,
@@ -134,23 +133,18 @@ class ProgressRepository:
     ) -> int:
         """Return completed level count."""
 
-        logger.debug(
-            "Counting completed levels",
+        stmt = select(func.count()).select_from(Progress).where(
+            Progress.completed.is_(True)
         )
 
-        query = {
-            "completed": True,
-        }
+        if user_id:
+            stmt = stmt.where(Progress.user_id == user_id)
 
-        if user_id is not None:
-            query["user_id"] = user_id
+        if course_id:
+            stmt = stmt.where(Progress.course_id == course_id)
 
-        if course_id is not None:
-            query["course_id"] = course_id
-
-        return await self.progress_collection.count_documents(
-            query,
-        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def count_completed_by_user_and_course(
         self,
@@ -159,83 +153,64 @@ class ProgressRepository:
     ) -> int:
         """Return completed levels for a user in a course."""
 
-        logger.debug(
-            "Counting completed levels. User=%s Course=%s",
-            user_id,
-            course_id,
+        result = await self.db.execute(
+            select(func.count()).select_from(Progress).where(
+                Progress.user_id == user_id,
+                Progress.course_id == course_id,
+                Progress.completed.is_(True),
+            )
         )
 
-        return await self.progress_collection.count_documents(
-            {
-                "user_id": user_id,
-                "course_id": course_id,
-                "completed": True,
-            }
-        )
+        return result.scalar_one()
 
     async def count_submissions(self) -> int:
         """Return total submission count."""
 
-        logger.debug(
-            "Counting submissions",
+        result = await self.db.execute(
+            select(func.count()).select_from(Submission)
         )
 
-        return await self.submission_collection.count_documents(
-            {}
-        )
+        return result.scalar_one()
 
     async def get_active_user_ids_since(
         self,
-        timestamp: str,
+        timestamp: datetime,
     ) -> list[str]:
         """Return active users since a timestamp."""
 
-        logger.debug(
-            "Fetching active users since %s",
-            timestamp,
+        result = await self.db.execute(
+            select(Progress.user_id)
+            .where(Progress.updated_at >= timestamp)
+            .distinct()
         )
 
-        return await self.progress_collection.distinct(
-            "user_id",
-            {
-                "updated_at": {
-                    "$gte": timestamp,
-                }
-            },
-        )
+        return result.scalars().all()
 
     async def get_user_progress(
         self,
         user_id: str,
-    ) -> list[dict]:
+    ) -> list[Progress]:
         """Return user progress."""
 
-        logger.debug(
-            "Fetching user progress for %s",
-            user_id,
+        result = await self.db.execute(
+            select(Progress).where(
+                Progress.user_id == user_id,
+            )
         )
 
-        return await self.progress_collection.find(
-            {
-                "user_id": user_id,
-            },
-            DEFAULT_PROJECTION,
-        ).to_list(MAX_RESULTS)
+        return result.scalars().all()
+
     async def get_continue_learning(
         self,
         user_id: str,
-    ) -> dict | None: 
+    ) -> Optional[Progress]:
         """Return the student's next level to continue."""
-        logger.debug(
-           "Fetching continue learning data for user=%s",
-            user_id,
-        )
-        return await self.progress_collection.find_one(
-        {
-            "user_id": user_id,
-            "completed": False,
-        },
-        DEFAULT_PROJECTION,
-    )
 
-progress_repository = ProgressRepository()
+        result = await self.db.execute(
+            select(Progress).where(
+                Progress.user_id == user_id,
+                Progress.completed.is_(False),
+            )
+        )
+
+        return result.scalar_one_or_none()

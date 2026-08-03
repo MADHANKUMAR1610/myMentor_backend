@@ -1,6 +1,7 @@
 """Global exception handlers."""
 
 import logging
+import traceback
 
 from fastapi import (
     FastAPI,
@@ -93,6 +94,14 @@ def register_exception_handlers(
         exc: Exception,
     ) -> JSONResponse:
         """Handle unexpected exceptions."""
+
+        print("\n========== EXCEPTION ==========")
+        traceback.print_exception(
+            type(exc),
+            exc,
+            exc.__traceback__,
+        )
+        print("========== END EXCEPTION ==========\n")
 
         logger.exception(
             "Unhandled exception on %s %s",

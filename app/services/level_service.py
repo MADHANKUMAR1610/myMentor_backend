@@ -3,16 +3,15 @@
 import logging
 
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories import (
-    challenge_repository,
-    level_repository,
-    progress_repository,
-)
-from app.schemas import (
-    Level,
-    LevelCreate,
-)
+from app.models.level import Level as LevelModel
+from app.models.user import User
+from app.repositories.challenge_repository import ChallengeRepository
+from app.repositories.level_repository import LevelRepository
+from app.repositories.progress_repository import ProgressRepository
+from app.schemas import Level, LevelCreate
+from app.schemas.common import gen_id
 
 logger = logging.getLogger(__name__)
 
@@ -20,31 +19,29 @@ logger = logging.getLogger(__name__)
 class LevelService:
     """Handle level business logic."""
 
-    def __init__(self) -> None:
-        self.level_repository = level_repository
-        self.challenge_repository = challenge_repository
-        self.progress_repository = progress_repository
+    def __init__(self, db: AsyncSession):
+        self.level_repository = LevelRepository(db)
+        self.challenge_repository = ChallengeRepository(db)
+        self.progress_repository = ProgressRepository(db)
 
     async def get_level(
         self,
         level_id: str,
-        user: dict,
+        user: User,
     ) -> dict:
         """Return level details with checkpoints."""
 
         logger.info(
             "Fetching level %s for user %s",
             level_id,
-            user["id"],
+            user.id,
         )
 
-        level = await self.level_repository.get_by_id(
-            level_id
-        )
+        level = await self.level_repository.get_by_id(level_id)
 
-        if not level:
+        if level is None:
             logger.warning(
-                "Level not found: %s",
+                "Level %s not found",
                 level_id,
             )
 
@@ -53,56 +50,93 @@ class LevelService:
                 detail="Level not found",
             )
 
-        checkpoints = (
-            await self.challenge_repository.get_checkpoints_by_level(
-                level_id
-            )
+        checkpoints = await self.challenge_repository.get_checkpoints_by_level(
+            level_id
         )
 
-        checkpoints.sort(
-            key=lambda checkpoint: checkpoint["order"]
-        )
+        checkpoints.sort(key=lambda checkpoint: checkpoint.order)
 
         challenge_ids = [
-            checkpoint["challenge_id"]
+            checkpoint.challenge_id
             for checkpoint in checkpoints
         ]
 
-        challenges = (
-            await self.challenge_repository.get_challenges_by_ids(
-                challenge_ids
-            )
+        challenges = await self.challenge_repository.get_challenges_by_ids(
+            challenge_ids
         )
 
         challenges_by_id = {
-            challenge["id"]: challenge
+            challenge.id: challenge
             for challenge in challenges
         }
 
-        self._attach_challenges(
-            checkpoints,
-            challenges_by_id,
-            user["role"],
-        )
+        checkpoint_data = []
 
-        level["checkpoints"] = checkpoints
+        for checkpoint in checkpoints:
 
-        progress = (
-            await self.progress_repository.get_by_user_and_level(
-                user["id"],
-                level_id,
+            challenge = challenges_by_id.get(
+                checkpoint.challenge_id
             )
-        )
 
-        level["progress"] = progress
+            challenge_data = None
+
+            if challenge:
+                challenge_data = {
+                    "id": challenge.id,
+                    "title": challenge.title,
+                    "business_scenario": challenge.business_scenario,
+                    "problem_statement": challenge.problem_statement,
+                    "difficulty": challenge.difficulty,
+                    "language": challenge.language,
+                    "starter_code": challenge.starter_code,
+                    "expected_output": challenge.expected_output,
+                    "constraints": challenge.constraints,
+                    "hints": challenge.hints,
+                    "solution": challenge.solution,
+                    "explanation": challenge.explanation,
+                    "marks": challenge.marks,
+                    "xp": challenge.xp,
+                    "retry_limit": challenge.retry_limit,
+                    "test_cases": challenge.test_cases,
+                    "created_at": challenge.created_at,
+                    "updated_at": challenge.updated_at,
+                }
+
+                if user.role != "admin":
+                    challenge_data["solution"] = None
+
+                    challenge_data["test_cases"] = [
+                        self._sanitize_test_case(test_case)
+                        for test_case in challenge_data.get(
+                            "test_cases",
+                            [],
+                        )
+                    ]
+
+            checkpoint_data.append(
+                {
+                    "id": checkpoint.id,
+                    "order": checkpoint.order,
+                    "timestamp_seconds": checkpoint.timestamp_seconds,
+                    "challenge": challenge_data,
+                }
+            )
+
+        progress = await self.progress_repository.get_by_user_and_level(
+            user.id,
+            level_id,
+        )
 
         logger.info(
-            "Level %s returned with %s checkpoints",
+            "Level %s returned successfully",
             level_id,
-            len(checkpoints),
         )
 
-        return level
+        return {
+            "level": Level.model_validate(level),
+            "checkpoints": checkpoint_data,
+            "progress": progress,
+        }
 
     async def create_level(
         self,
@@ -115,54 +149,30 @@ class LevelService:
             payload.title,
         )
 
-        level = Level(
-            **payload.model_dump()
+        level = LevelModel(
+            id=gen_id(),
+            course_id=payload.course_id,
+            stage=payload.stage,
+            level_number=payload.level_number,
+            title=payload.title,
+            description=payload.description,
+            xp_reward=payload.xp_reward,
+            pass_percentage=payload.pass_percentage,
+            estimated_minutes=payload.estimated_minutes,
+            video_url=payload.video_url,
+            video_duration_seconds=payload.video_duration_seconds,
+            theory_html=payload.theory_html,
+            notes_url=payload.notes_url,
         )
 
-        await self.level_repository.create(
-            level.model_dump()
-        )
+        await self.level_repository.create(level)
 
         logger.info(
-            "Level created successfully. Level ID: %s",
+            "Level created successfully. ID=%s",
             level.id,
         )
 
-        return level
-
-    def _attach_challenges(
-        self,
-        checkpoints: list[dict],
-        challenges_by_id: dict[str, dict],
-        role: str,
-    ) -> None:
-        """Attach challenge information to checkpoints."""
-
-        for checkpoint in checkpoints:
-            challenge = (
-                challenges_by_id.get(
-                    checkpoint["challenge_id"],
-                    {},
-                ).copy()
-            )
-
-            if role != "admin":
-                challenge.pop(
-                    "solution",
-                    None,
-                )
-
-                challenge["test_cases"] = [
-                    self._sanitize_test_case(
-                        test_case
-                    )
-                    for test_case in challenge.get(
-                        "test_cases",
-                        [],
-                    )
-                ]
-
-            checkpoint["challenge"] = challenge
+        return Level.model_validate(level)
 
     @staticmethod
     def _sanitize_test_case(
@@ -170,9 +180,7 @@ class LevelService:
     ) -> dict:
         """Hide expected output for hidden test cases."""
 
-        if not test_case.get(
-            "is_hidden",
-        ):
+        if not test_case.get("is_hidden"):
             return test_case
 
         return {
@@ -180,6 +188,3 @@ class LevelService:
             for key, value in test_case.items()
             if key != "expected_output"
         }
-
-
-level_service = LevelService()
