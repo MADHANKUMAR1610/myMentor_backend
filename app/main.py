@@ -48,13 +48,18 @@ def create_application() -> FastAPI:
 
     register_exception_handlers(application)
 
+    print("\n========== CORS SETTINGS ==========")
+    print("CORS_ORIGINS:", settings.CORS_ORIGINS)
+    print("TYPE:", type(settings.CORS_ORIGINS))
+    print("===================================\n")
+
     application.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
     application.add_middleware(RequestIDMiddleware)
     application.add_middleware(ProcessTimeMiddleware)
