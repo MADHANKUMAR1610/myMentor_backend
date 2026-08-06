@@ -8,6 +8,10 @@ from app.services.code_execution_service import CodeExecutionService
 from app.services.course_service import CourseService
 from app.services.level_service import LevelService
 from app.services.progress_service import ProgressService
+from app.services.gemini_service import (
+    GeminiService,
+    gemini_service,
+)
 
 __all__ = [
     "auth_service",
@@ -18,4 +22,6 @@ __all__ = [
     "CourseService",
     "LevelService",
     "ProgressService",
+    "GeminiService",
+    "gemini_service",
 ]

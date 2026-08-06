@@ -16,7 +16,9 @@ from app.api.routes.code_execution import (
 from app.api.routes.progress import router as progress_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.certificates import router as certificates_router
-
+from app.api.routes.career import (
+    router as career_router,
+)
 
 api_router = APIRouter()
 
@@ -30,3 +32,6 @@ api_router.include_router(code_execution_router)
 api_router.include_router(progress_router)
 api_router.include_router(admin_router)
 api_router.include_router(certificates_router)
+api_router.include_router(
+    career_router,
+)

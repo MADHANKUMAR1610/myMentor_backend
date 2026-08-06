@@ -16,6 +16,9 @@ from app.models.checkpoint import Checkpoint
 from app.models.enrollment import Enrollment
 from app.models.progress import Progress
 from app.models.submission import Submission
+from app.models.career_profile import CareerProfile
+from app.models.career_report import CareerReport
+from app.models.career_roadmap import CareerRoadmap
 
 config = context.config
 

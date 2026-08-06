@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # PostgreSQL
     POSTGRES_DATABASE_URL: str
 
+    # Gemini AI
+    GEMINI_API_KEY: SecretStr
+
     JWT_SECRET: SecretStr = SecretStr(
         "change-this-secret"
     )

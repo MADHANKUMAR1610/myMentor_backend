@@ -6,3 +6,6 @@ from .level import Level
 from .progress import Progress
 from .submission import Submission
 from .user import User
+from app.models.career_profile import CareerProfile
+from app.models.career_report import CareerReport
+from app.models.career_roadmap import CareerRoadmap

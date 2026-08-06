@@ -46,7 +46,16 @@ from app.schemas.progress import (
     CompleteLevelRequest,
 )
 from app.schemas.response import ApiResponse
-
+from app.schemas.career_path import (
+    CareerProfileCreate,
+    CareerProfileResponse,
+    CareerReportResponse,
+    CareerRoadmapResponse,
+)
+from app.schemas.career_path import (
+    CareerPathRequest,
+    CareerPathResponse,
+)
 __all__ = [
     "LoginRequest",
     "TokenResponse",
