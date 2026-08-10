@@ -14,7 +14,6 @@ from app.repositories.course_repository import CourseRepository
 from app.repositories.level_repository import LevelRepository
 from app.schemas import Course, CourseCreate, gen_id
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -74,6 +73,11 @@ class CourseService:
             course_id,
         )
 
+        # Get all levels for this course
+        levels = await self.level_repository.get_by_course(
+            course_id
+        )
+
         return {
             "id": course.id,
             "title": course.title,
@@ -84,6 +88,24 @@ class CourseService:
             "duration_hours": course.duration_hours,
             "status": course.status,
             "enrolled": enrollment is not None,
+
+            "levels": [
+                {
+                    "id": level.id,
+                    "title": level.title,
+                    "stage": level.stage,
+                    "level_number": level.level_number,
+                    "description": level.description,
+                    "xp_reward": level.xp_reward,
+                    "pass_percentage": level.pass_percentage,
+                    "estimated_minutes": level.estimated_minutes,
+                    "video_url": level.video_url,
+                    "video_duration_seconds": level.video_duration_seconds,
+                    "theory_html": level.theory_html,
+                    "notes_url": level.notes_url,
+                }
+                for level in levels
+            ],
         }
 
     async def create_course(

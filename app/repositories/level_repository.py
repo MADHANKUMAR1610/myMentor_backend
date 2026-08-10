@@ -53,12 +53,18 @@ class LevelRepository:
     ) -> list[Level]:
         """Return all levels for a course."""
 
-        logger.debug("Fetching levels for course %s", course_id)
+        logger.debug(
+            "Fetching levels for course %s",
+            course_id,
+        )
 
         result = await self.db.execute(
             select(Level)
             .where(Level.course_id == course_id)
-            .order_by(Level.stage, Level.level_number)
+            .order_by(
+                Level.stage,
+                Level.level_number,
+            )
         )
 
         return result.scalars().all()
@@ -69,10 +75,15 @@ class LevelRepository:
     ) -> None:
         """Insert a new level."""
 
-        logger.debug("Creating level %s", level.id)
+        logger.debug(
+            "Creating level %s",
+            level.id,
+        )
 
         self.db.add(level)
+
         await self.db.commit()
+
         await self.db.refresh(level)
 
     async def count_by_course(
@@ -81,7 +92,10 @@ class LevelRepository:
     ) -> int:
         """Return total levels for a course."""
 
-        logger.debug("Counting levels for course %s", course_id)
+        logger.debug(
+            "Counting levels for course %s",
+            course_id,
+        )
 
         result = await self.db.execute(
             select(func.count())
@@ -99,7 +113,8 @@ class LevelRepository:
         logger.debug("Counting levels")
 
         result = await self.db.execute(
-            select(func.count()).select_from(Level)
+            select(func.count())
+            .select_from(Level)
         )
 
         return result.scalar_one()
