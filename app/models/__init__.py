@@ -9,3 +9,4 @@ from .user import User
 from app.models.career_profile import CareerProfile
 from app.models.career_report import CareerReport
 from app.models.career_roadmap import CareerRoadmap
+from .otp_verification import OTPVerification

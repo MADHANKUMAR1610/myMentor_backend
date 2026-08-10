@@ -1,13 +1,12 @@
 """Authentication request and response schemas."""
-
+from pydantic import BaseModel
 from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr
 
-
 class UserPublic(BaseModel):
     id: str
-    email: EmailStr
+    email: str
     name: str
     role: Literal["admin", "student"]
     xp: int = 0
@@ -25,6 +24,19 @@ class UserCreate(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class SendOTPRequest(BaseModel):
+    mobile: str
+
+
+class VerifyOTPRequest(BaseModel):
+    mobile: str
+    otp: str
+
+
+class GoogleLoginRequest(BaseModel):
+    token: str
 
 
 class TokenResponse(BaseModel):

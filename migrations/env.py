@@ -19,6 +19,7 @@ from app.models.submission import Submission
 from app.models.career_profile import CareerProfile
 from app.models.career_report import CareerReport
 from app.models.career_roadmap import CareerRoadmap
+from app.models.otp_verification import OTPVerification
 
 config = context.config
 

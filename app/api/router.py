@@ -34,4 +34,5 @@ api_router.include_router(admin_router)
 api_router.include_router(certificates_router)
 api_router.include_router(
     career_router,
+    
 )

@@ -56,12 +56,7 @@ class UserRepository:
             select(User).where(User.id == user_id)
         )
 
-        user = result.scalar_one_or_none()
-
-        if not user:
-            return None
-
-        return user
+        return result.scalar_one_or_none()
 
     async def create(
         self,
@@ -73,6 +68,48 @@ class UserRepository:
         db.add(user)
         await db.commit()
         await db.refresh(user)
+
+    async def update(
+        self,
+        db: AsyncSession,
+        user: User,
+    ) -> User:
+        logger.debug("Updating user %s", user.id)
+
+        await db.commit()
+        await db.refresh(user)
+
+        return user
+
+    async def get_by_mobile(
+        self,
+        db: AsyncSession,
+        mobile: str,
+    ) -> User | None:
+        """Return user by mobile number."""
+
+        result = await db.execute(
+            select(User).where(
+                User.mobile == mobile
+            )
+        )
+
+        return result.scalar_one_or_none()
+
+    async def get_by_google_id(
+        self,
+        db: AsyncSession,
+        google_id: str,
+    ) -> User | None:
+        """Return user by Google ID."""
+
+        result = await db.execute(
+            select(User).where(
+                User.google_id == google_id
+            )
+        )
+
+        return result.scalar_one_or_none()
 
     async def increment_xp(
         self,
@@ -86,7 +123,10 @@ class UserRepository:
             xp,
         )
 
-        user = await self.get_by_id(db, user_id)
+        user = await self.get_by_id(
+            db,
+            user_id,
+        )
 
         if user:
             user.xp += xp
@@ -103,7 +143,10 @@ class UserRepository:
             user_id,
         )
 
-        user = await self.get_by_id(db, user_id)
+        user = await self.get_by_id(
+            db,
+            user_id,
+        )
 
         if user:
             user.xp += xp

@@ -48,6 +48,38 @@ class User(Base):
         nullable=True,
     )
 
+    mobile: Mapped[str | None] = mapped_column(
+        String(15),
+        unique=True,
+        nullable=True,
+    )
+
+    google_id: Mapped[str | None] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=True,
+    )
+
+    profile_image: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    login_provider: Mapped[str] = mapped_column(
+        String(20),
+        default="email",
+    )
+
+    is_mobile_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+    )
+
+    is_email_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+    )
+
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
@@ -63,3 +95,7 @@ class User(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+
+print("MODEL FILE:", __file__)
+print(User.__table__.columns.keys())

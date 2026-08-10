@@ -2,6 +2,9 @@
 
 from app.schemas.auth import (
     LoginRequest,
+    SendOTPRequest,
+    VerifyOTPRequest,
+    GoogleLoginRequest,
     TokenResponse,
     UserCreate,
     UserPublic,
@@ -58,9 +61,13 @@ from app.schemas.career_path import (
 )
 __all__ = [
     "LoginRequest",
+    "SendOTPRequest",
+    "VerifyOTPRequest",
+    "GoogleLoginRequest",
     "TokenResponse",
     "UserCreate",
     "UserPublic",
+
     "Challenge",
     "ChallengeBase",
     "ChallengeCreate",
@@ -68,20 +75,25 @@ __all__ = [
     "CheckpointBase",
     "CheckpointCreate",
     "TestCase",
+
     "RunRequest",
     "RunResult",
     "SubmissionRequest",
     "SubmissionResult",
     "TestCaseResult",
+
     "gen_id",
     "utc_now_iso",
+
     "Course",
     "CourseBase",
     "CourseCreate",
+
     "Level",
     "LevelBase",
     "LevelCreate",
     "StageName",
+
     "CheckpointProgress",
     "Enrollment",
     "LevelProgress",
