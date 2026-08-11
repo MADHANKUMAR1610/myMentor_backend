@@ -30,21 +30,26 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-# SmsHorizon SMS
-
-    SMSHORIZON_BASE_URL: str = "https://smshorizon.com/api/v2"
+    # SmsHorizon
+    SMSHORIZON_BASE_URL: str = (
+        "https://smshorizon.com/api/v2"
+    )
 
     SMSHORIZON_USER: str
 
     SMSHORIZON_API_KEY: SecretStr
 
-    # Google Authentication 
-    GOOGLE_CLIENT_ID: str 
+    SMSHORIZON_SENDER_ID: str
+
+    SMSHORIZON_TEMPLATE_ID: str | None = None
+
+    # Google Authentication
+    GOOGLE_CLIENT_ID: str
 
     # CORS
     CORS_ORIGINS: list[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
+           "http://localhost:4028",
+    "http://127.0.0.1:4028",
         "https://my-mentor-lms.onrender.com",
         "https://career-path-k5ip.onrender.com",
     ]
@@ -58,6 +63,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return cached application settings."""
+
     return Settings()
 
 

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.otp_verification import OTPVerification
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +28,10 @@ class OTPRepository:
     ) -> None:
         """Save OTP."""
 
-        print("OTP REPOSITORY CREATE", flush=True)
+        print(
+            "OTP REPOSITORY CREATE",
+            flush=True,
+        )
 
         logger.debug(
             "Saving OTP for %s",
@@ -48,7 +52,7 @@ class OTPRepository:
         """Return valid OTP."""
 
         print(
-            f"GET VALID OTP: {mobile}",
+            f"CHECKING OTP FOR: {mobile}",
             flush=True,
         )
 
@@ -71,7 +75,7 @@ class OTPRepository:
         """Mark OTP as verified."""
 
         print(
-            f"MARK OTP VERIFIED: {otp.mobile}",
+            f"MARKING OTP VERIFIED: {otp.mobile}",
             flush=True,
         )
 
@@ -88,7 +92,7 @@ class OTPRepository:
         """Delete previous OTPs."""
 
         print(
-            f"DELETE OLD OTP: {mobile}",
+            f"DELETE OLD OTP FOR: {mobile}",
             flush=True,
         )
 

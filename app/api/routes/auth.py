@@ -6,6 +6,8 @@ from fastapi import (
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.dependencies import get_otp_service
+from app.services.otp_service import OTPService
 
 from app.core.auth import get_current_user
 from app.database.postgres import get_db
@@ -71,29 +73,38 @@ async def login(
     )
 
 
-@router.post(
-    "/student/send-otp",
-    status_code=status.HTTP_200_OK,
-)
-async def send_student_otp(
-    payload: SendOTPRequest,
-    db: AsyncSession = Depends(get_db),
+@router.post("/send-otp")
+async def send_otp(
+    request: SendOTPRequest,
+    otp_service: OTPService = Depends(
+        get_otp_service
+    ),
 ):
-    print(
-        "AUTH ROUTE HIT",
-        flush=True,
-    )
+    try:
 
-    result = await auth_service.send_otp(
-        db,
-        payload.mobile,
-    )
+        result = await otp_service.send_otp(
+            request.mobile
+        )
 
-    return ApiResponse(
-        message="OTP sent successfully",
-        data=result,
-    )
+        return {
+            "success": True,
+            "message": result,
+            "data": result,
+        }
 
+    except ValueError as exc:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    except RuntimeError as exc:
+
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        )
 
 @router.post(
     "/student/verify-otp",
