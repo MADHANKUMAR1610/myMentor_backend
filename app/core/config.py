@@ -45,6 +45,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "https://my-mentor-lms.onrender.com",
+        "https://career-path-k5ip.onrender.com",
     ]
 
     model_config = SettingsConfigDict(
