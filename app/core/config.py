@@ -48,8 +48,8 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = [
-           "http://localhost:4028",
-    "http://127.0.0.1:4028",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "https://my-mentor-lms.onrender.com",
         "https://career-path-k5ip.onrender.com",
     ]
