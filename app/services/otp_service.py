@@ -4,7 +4,7 @@ import random
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from twilio.rest import Client
+import httpx
 
 from app.core.config import settings
 from app.models.otp_verification import OTPVerification
@@ -20,33 +20,67 @@ class OTPService:
     ):
         self.repository = repository
 
-    def _send_sms(
+    async def _send_sms(
         self,
         mobile: str,
         otp: str,
     ) -> None:
-        """Send OTP SMS using Twilio."""
+        """Send OTP SMS using SmsHorizon."""
 
-        print("TWILIO SMS FUNCTION HIT", flush=True)
-
-        client = Client(
-            settings.TWILIO_ACCOUNT_SID,
-            settings.TWILIO_AUTH_TOKEN.get_secret_value(),
+        print(
+            "SMSHORIZON SMS FUNCTION HIT",
+            flush=True,
         )
 
-        message = client.messages.create(
-            body=(
-                f"Your Digipin Academy OTP is {otp}. "
-                "It is valid for 5 minutes."
+        url = (
+            f"{settings.SMSHORIZON_BASE_URL}"
+            "/sendsms"
+        )
+
+        headers = {
+            "Authorization": (
+                "Bearer "
+                f"{settings.SMSHORIZON_API_KEY.get_secret_value()}"
+            )
+        }
+
+        data = {
+            "user": settings.SMSHORIZON_USER,
+            "number": mobile,
+            "message": (
+                f"OTP for your new user account "
+                f"registration is: {otp}"
             ),
-            from_=settings.TWILIO_PHONE_NUMBER,
-            to=mobile,
+            "type": "txt",
+        }
+
+        async with httpx.AsyncClient(
+            timeout=30.0
+        ) as client:
+
+            response = await client.post(
+                url,
+                headers=headers,
+                data=data,
+            )
+
+        print(
+            "SmsHorizon status:",
+            response.status_code,
+            flush=True,
         )
 
         print(
-            f"Twilio SMS sent successfully: {message.sid}",
+            "SmsHorizon response:",
+            response.text,
             flush=True,
         )
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                "SmsHorizon SMS sending failed: "
+                f"{response.text}"
+            )
 
     async def send_otp(
         self,
@@ -54,7 +88,10 @@ class OTPService:
     ) -> str:
         """Generate, save and send OTP."""
 
-        print("OTP SERVICE HIT", flush=True)
+        print(
+            "OTP SERVICE HIT",
+            flush=True,
+        )
 
         # Generate 6 digit OTP
         otp = str(
@@ -92,13 +129,12 @@ class OTPService:
         )
 
         # Send SMS
-        self._send_sms(
+        await self._send_sms(
             mobile,
             otp,
         )
 
-        # IMPORTANT:
-        # Do not return the actual OTP.
+        # Never return actual OTP
         return "OTP sent successfully"
 
     async def verify_otp(
@@ -113,9 +149,11 @@ class OTPService:
             flush=True,
         )
 
-        otp_model = await self.repository.get_valid_otp(
-            mobile,
-            otp,
+        otp_model = (
+            await self.repository.get_valid_otp(
+                mobile,
+                otp,
+            )
         )
 
         if otp_model is None:

@@ -35,7 +35,9 @@ class OTPRepository:
         )
 
         self.db.add(otp)
+
         await self.db.commit()
+
         await self.db.refresh(otp)
 
     async def get_valid_otp(
@@ -45,12 +47,18 @@ class OTPRepository:
     ) -> Optional[OTPVerification]:
         """Return valid OTP."""
 
+        print(
+            f"GET VALID OTP: {mobile}",
+            flush=True,
+        )
+
         result = await self.db.execute(
             select(OTPVerification).where(
                 OTPVerification.mobile == mobile,
                 OTPVerification.otp == otp,
-                OTPVerification.verified == False,
-                OTPVerification.expires_at > datetime.utcnow(),
+                OTPVerification.verified.is_(False),
+                OTPVerification.expires_at
+                > datetime.utcnow(),
             )
         )
 
@@ -62,9 +70,15 @@ class OTPRepository:
     ) -> None:
         """Mark OTP as verified."""
 
+        print(
+            f"MARK OTP VERIFIED: {otp.mobile}",
+            flush=True,
+        )
+
         otp.verified = True
 
         await self.db.commit()
+
         await self.db.refresh(otp)
 
     async def delete_old_otps(
@@ -72,6 +86,11 @@ class OTPRepository:
         mobile: str,
     ) -> None:
         """Delete previous OTPs."""
+
+        print(
+            f"DELETE OLD OTP: {mobile}",
+            flush=True,
+        )
 
         await self.db.execute(
             delete(OTPVerification).where(
