@@ -203,14 +203,24 @@ class ProgressRepository:
     async def get_continue_learning(
         self,
         user_id: str,
-    ) -> Optional[Progress]:
-        """Return the student's next level to continue."""
+)     -> Optional[Progress]:
+      """Return the student's next incomplete level to continue."""
 
-        result = await self.db.execute(
-            select(Progress).where(
-                Progress.user_id == user_id,
-                Progress.completed.is_(False),
-            )
+      logger.debug(
+      "Fetching continue learning progress for user=%s",
+        user_id,
+    )
+
+      result = await self.db.execute(
+        select(Progress)
+        .where(
+            Progress.user_id == user_id,
+            Progress.completed.is_(False),
         )
+        .order_by(
+            Progress.updated_at.asc()
+        )
+        .limit(1)
+    )
 
-        return result.scalar_one_or_none()
+      return result.scalar_one_or_none()

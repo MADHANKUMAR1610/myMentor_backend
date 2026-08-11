@@ -30,12 +30,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    # Twilio SMS
-  # Twilio Verify OTP
-  # Twilio SMS
-    TWILIO_ACCOUNT_SID: str | None = None
-    TWILIO_AUTH_TOKEN: SecretStr | None = None
-    TWILIO_PHONE_NUMBER: str | None = None
+# SmsHorizon SMS
+
+    SMSHORIZON_BASE_URL: str = "https://smshorizon.com/api/v2"
+
+    SMSHORIZON_USER: str
+
+    SMSHORIZON_API_KEY: SecretStr
 
     # Google Authentication 
     GOOGLE_CLIENT_ID: str 
